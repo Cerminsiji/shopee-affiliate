@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             ApiConfigSeeder::class,
             PlatformVoucherSeeder::class,
+            BlogPostSeeder::class,
         ]);
     }
 }

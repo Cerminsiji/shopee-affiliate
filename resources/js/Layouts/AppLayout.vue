@@ -20,6 +20,7 @@ const auth = useAuthStore()
 
                 <nav class="hidden md:flex items-center gap-6 text-sm font-medium">
                     <Link v-if="!auth.isAdmin" href="/" class="text-[var(--color-muted)] hover:text-[var(--color-ink)] transition">Trang chủ</Link>
+                    <Link v-if="!auth.isAdmin" href="/blog" class="text-[var(--color-muted)] hover:text-[var(--color-ink)] transition">Blog</Link>
                     <Link v-if="auth.isLoggedIn && !auth.isAdmin" href="/history" class="text-[var(--color-muted)] hover:text-[var(--color-ink)] transition">Lịch sử</Link>
                     <Link v-if="auth.isLoggedIn && !auth.isAdmin" href="/profile" class="text-[var(--color-muted)] hover:text-[var(--color-ink)] transition">Tài khoản</Link>
                     <Link v-if="auth.isAdmin" href="/admin/dashboard" class="text-[var(--color-muted)] hover:text-[var(--color-ink)] transition">Admin</Link>
@@ -49,7 +50,9 @@ const auth = useAuthStore()
         <!-- Page content with transition -->
         <main class="pb-20 md:pb-0">
             <Transition name="fade-up" mode="out-in">
-                <slot />
+                <div>
+                    <slot />
+                </div>
             </Transition>
         </main>
 

@@ -21,6 +21,11 @@ class ProductMetadataService
 {
     private const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+    public function __construct(
+        private UrlValidationService $urlValidator,
+        private ShopeeProductLookupService $shopeeLookup,
+    ) {}
+
     public function fetch(string $url, string $platform): ?array
     {
         return Cache::remember('product_meta:'.md5($url), now()->addHours(6), function () use ($url, $platform) {
@@ -53,6 +58,14 @@ class ProductMetadataService
         // Tiki có API công khai rất ổn định — ưu tiên dùng id từ URL đã giải redirect
         if ($platform === 'tiki') {
             if ($data = $this->fromTikiApi($finalUrl)) {
+                return $data;
+            }
+        }
+
+        // Shopee chặn gọi API thẳng từ server (anti-bot) — dùng proxy bên thứ 3
+        if ($platform === 'shopee') {
+            $ids = $this->urlValidator->extractShopeeIds($finalUrl);
+            if ($ids && $data = $this->shopeeLookup->getByItemId($ids['item_id'])) {
                 return $data;
             }
         }

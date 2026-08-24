@@ -32,7 +32,7 @@ class UrlValidationService
     {
         $parsed = parse_url($url);
 
-        if (!$parsed || empty($parsed['host'])) {
+        if (! $parsed || empty($parsed['host'])) {
             throw new AffiliateScanException('URL không hợp lệ.');
         }
 
@@ -40,7 +40,7 @@ class UrlValidationService
         $host = preg_replace('/^www\./', '', $host);
 
         foreach ($this->allowedDomains as $domain) {
-            if ($host === $domain || str_ends_with($host, '.' . $domain)) {
+            if ($host === $domain || str_ends_with($host, '.'.$domain)) {
                 return $this->platformMap[$domain] ?? 'shopee';
             }
         }
@@ -50,11 +50,68 @@ class UrlValidationService
         );
     }
 
+    // Domain sản phẩm/short-link chính thức của Shopee — dùng để lọc input người dùng dán vào.
+    private array $shopeeInputDomains = [
+        'shopee.vn',
+        's.shopee.vn',
+        'shp.ee',
+    ];
+
+    public function validateShopeeOnly(string $url): void
+    {
+        $parsed = parse_url($url);
+
+        if (! $parsed || empty($parsed['host'])) {
+            throw new AffiliateScanException('URL không hợp lệ.');
+        }
+
+        $host = strtolower($parsed['host']);
+        $host = preg_replace('/^www\./', '', $host);
+
+        foreach ($this->shopeeInputDomains as $domain) {
+            if ($host === $domain || str_ends_with($host, '.'.$domain)) {
+                return;
+            }
+        }
+
+        throw new AffiliateScanException('Chỉ hỗ trợ link sản phẩm Shopee.');
+    }
+
+    // Domain được phép làm đích cho short-link /go/{code}: link sản phẩm Shopee trực tiếp,
+    // hoặc link voucher salesoc.vn/s.afp.ad/shp.ee (chain redirect áp mã giảm giá thật).
+    private array $allowedRedirectDomains = [
+        'shopee.vn',
+        's.shopee.vn',
+        'shp.ee',
+        'salesoc.vn',
+        's.afp.ad',
+    ];
+
+    public function validateAffiliateRedirectUrl(string $url): void
+    {
+        $parsed = parse_url($url);
+
+        if (! $parsed || empty($parsed['host'])) {
+            throw new AffiliateScanException('URL không hợp lệ.');
+        }
+
+        $host = strtolower($parsed['host']);
+        $host = preg_replace('/^www\./', '', $host);
+
+        foreach ($this->allowedRedirectDomains as $domain) {
+            if ($host === $domain || str_ends_with($host, '.'.$domain)) {
+                return;
+            }
+        }
+
+        throw new AffiliateScanException('Link không hợp lệ.');
+    }
+
     public function extractShopeeIds(string $url): array
     {
-        // Pattern: /product-name-i.ITEM_ID.SHOP_ID
+        // Pattern: /product-name-i.SHOP_ID.ITEM_ID
         if (preg_match('/-i\.(\d+)\.(\d+)/', $url, $m)) {
-            return ['item_id' => $m[1], 'shop_id' => $m[2]];
+            return ['shop_id' => $m[1], 'item_id' => $m[2]];
         }
 
         return [];

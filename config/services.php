@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'zalo' => [
+        'oa_token' => env('ZALO_OA_TOKEN'),
+    ],
+
+    'shopee_affiliate' => [
+        // mmp_pid dùng để gắn hoa hồng đơn hàng về tài khoản affiliate Shopee của mình.
+        'mmp_pid' => env('SHOPEE_MMP_PID', 'an_17332410386'),
+    ],
+
 ];

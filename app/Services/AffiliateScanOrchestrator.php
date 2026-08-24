@@ -41,7 +41,9 @@ class AffiliateScanOrchestrator
         $finalPrice = max(0, $discounted - $voucherDiscount);
         $totalSaved = $original - $finalPrice;
         $pctSaved = $original > 0 ? round($totalSaved / $original * 100) : 0;
-        $cashback = round($finalPrice * $this->accessTrade->getCashbackRate($platform));
+        $cashbackRate = $productInfo['cashback_rate'] ?? $this->accessTrade->getCashbackRate($platform);
+        $cashback = round($finalPrice * $cashbackRate);
+        unset($productInfo['cashback_rate']); // không phải cột DB — chỉ dùng để tính cashback ở trên
 
         // 6. Save to DB and track commission only for logged-in users
         if ($user) {
@@ -119,6 +121,7 @@ class AffiliateScanOrchestrator
                 'discount_percent' => $meta['discount_percent'],
                 'sold_count' => $meta['sold_count'],
                 'rating' => $meta['rating'],
+                'cashback_rate' => $meta['cashback_rate'] ?? null,
             ];
         }
 

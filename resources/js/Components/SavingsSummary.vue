@@ -36,8 +36,9 @@ function vnd(n) {
         <div v-if="cashback > 0" class="mt-4 bg-[var(--color-green-soft)] rounded-xl px-4 py-3 flex items-center gap-2">
             <span class="text-[var(--color-brand-green)]">💰</span>
             <div>
-                <p class="text-xs text-[var(--color-brand-green)] font-semibold">Hoàn tiền dự kiến</p>
+                <p class="text-xs text-[var(--color-brand-green)] font-semibold">Hoàn tiền dự kiến (ước tính)</p>
                 <p class="font-extrabold text-[var(--color-brand-green)]">+{{ vnd(cashback) }}</p>
+                <p class="text-[10px] text-[var(--color-brand-green)]/70 mt-0.5">Ước tính theo tỷ lệ hoa hồng hiện tại, có thể thay đổi và chưa phải số tiền cam kết.</p>
             </div>
         </div>
 

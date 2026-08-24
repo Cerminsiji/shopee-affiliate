@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import CouponTicket from '@/Components/CouponTicket.vue'
 import SavingsSummary from '@/Components/SavingsSummary.vue'
+import Disclaimer from '@/Components/Disclaimer.vue'
 
 const props = defineProps({
     product: Object,
@@ -118,6 +119,8 @@ const platformLabels = {
                             </a>
                         </div>
                     </div>
+
+                    <Disclaimer />
                 </div>
 
                 <!-- Right sticky summary (desktop only) -->

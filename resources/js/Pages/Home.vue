@@ -2,18 +2,115 @@
 import { ref, computed } from 'vue'
 import { Head } from '@inertiajs/vue3'
 import { router } from '@inertiajs/vue3'
+import axios from 'axios'
+import { useLocalStorage } from '@vueuse/core'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import CouponTicket from '@/Components/CouponTicket.vue'
+import Disclaimer from '@/Components/Disclaimer.vue'
 import { useToast } from '@/composables/useToast'
 
 const props = defineProps({
     vouchers: { type: Array, default: () => [] },
+    voucherResult: { type: Object, default: null },
 })
 
 const url = ref('')
 const scanning = ref(false)
 const error = ref(null)
 const toast = useToast()
+
+// --- sanvoucher.vn: công cụ lấy link voucher công khai, không cần đăng nhập ---
+// Link CTA (voucher_links) trỏ thẳng tới link affiliate của salesoc.vn — nơi mã giảm giá
+// thực sự được áp dụng. Đơn hàng qua link này tính hoa hồng cho salesoc.vn, không phải
+// cho mình; đây là đánh đổi có chủ đích để người dùng nhận được mã giảm giá thật.
+const SOURCE_LABELS = { facebook: 'Facebook', instagram: 'Instagram', zalo: 'Zalo' }
+
+const voucherUrl = ref('')
+const resolving = ref(false)
+const voucherError = ref(null)
+const history = useLocalStorage('sv_history', [])
+
+function resolveVoucher() {
+    if (!voucherUrl.value.trim()) return
+    resolving.value = true
+    voucherError.value = null
+
+    router.post('/voucher/resolve', { url: voucherUrl.value }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            resolving.value = false
+            const result = props.voucherResult
+            if (result) {
+                history.value = [
+                    {
+                        url: result.canonical_url,
+                        product_name: result.product?.product_name || null,
+                        product_image: result.product?.product_image || null,
+                        created_at: new Date().toISOString(),
+                    },
+                    ...history.value,
+                ].slice(0, 5)
+            }
+        },
+        onError: (errors) => {
+            voucherError.value = errors.voucher_url || 'Có lỗi xảy ra, vui lòng thử lại.'
+            toast.error(voucherError.value)
+            resolving.value = false
+        },
+    })
+}
+
+// salesoc.vn không trả trạng thái còn/hết lượt của từng mã, nên hiển thị TẤT CẢ lựa chọn
+// mỗi nền tảng (không chỉ mã % cao nhất) — bấm thử lần lượt nếu mã đầu đã hết lượt.
+const voucherLinkEntries = computed(() => {
+    const links = props.voucherResult?.voucher_links || {}
+    const entries = []
+    for (const [source, options] of Object.entries(links)) {
+        (options || []).forEach((opt, i) => {
+            entries.push({
+                key: `${source}-${i}`,
+                source,
+                url: opt.url,
+                label: opt.label || SOURCE_LABELS[source],
+            })
+        })
+    }
+    return entries
+})
+
+const shorteningKey = ref(null)
+
+async function openVoucherLink(entry) {
+    if (!entry?.url || shorteningKey.value) return
+
+    shorteningKey.value = entry.key
+    // Mở tab trắng NGAY trong lúc click (đồng bộ) để trình duyệt không chặn popup —
+    // nếu đợi axios xong mới gọi window.open() thì đã mất "user gesture", dễ bị chặn.
+    const newTab = window.open('', '_blank')
+
+    try {
+        const { data } = await axios.post('/voucher/shorten', {
+            url: entry.url,
+            source: entry.source,
+            product_name: props.voucherResult?.product?.product_name || null,
+        })
+        if (newTab) {
+            newTab.location.href = data.short_url
+        } else {
+            // Popup bị chặn — điều hướng ngay tab hiện tại thay vì bỏ cuộc.
+            window.location.href = data.short_url
+        }
+    } catch (e) {
+        newTab?.close()
+        toast.error('Không thể tạo link, vui lòng thử lại.')
+    } finally {
+        shorteningKey.value = null
+    }
+}
+
+function vnd(n) {
+    return '₫' + Number(n || 0).toLocaleString('vi-VN')
+}
 
 // --- Mã gợi ý ---
 const platformTabs = [
@@ -55,7 +152,10 @@ function scan() {
 </script>
 
 <template>
-    <Head title="Lấy mã giảm giá ngay" />
+    <Head>
+        <title>Tìm Voucher Shopee Facebook YouTube Instagram | sanvoucher.vn</title>
+        <meta name="description" content="Dán link sản phẩm Shopee → nhận link voucher độc quyền Facebook, YouTube, Instagram. Xem giá sau giảm ngay." />
+    </Head>
     <AppLayout>
         <!-- Hero -->
         <section class="relative overflow-hidden pt-16 pb-20 px-4">
@@ -109,6 +209,99 @@ function scan() {
                     <span>💰 ₫4.2 tỷ đã tiết kiệm</span>
                     <span>⚡ Quét trong 3 giây</span>
                     <span>🔐 Bảo mật tuyệt đối</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- sanvoucher.vn: Công cụ lấy voucher công khai (không cần đăng nhập) -->
+        <section class="py-12 px-4 bg-[var(--color-bg)]">
+            <div class="max-w-xl mx-auto">
+                <div class="text-center mb-6">
+                    <h2 class="text-2xl font-extrabold text-[var(--color-ink)] mb-2">sanvoucher.vn — Lấy link voucher Shopee</h2>
+                    <p class="text-[var(--color-muted)] text-sm">Dán link sản phẩm Shopee, nhận link voucher riêng cho Facebook, YouTube, Instagram.</p>
+                </div>
+
+                <!-- Mobile-first: 1 cột, input trên, nút to bên dưới -->
+                <div class="flex flex-col gap-3">
+                    <input
+                        v-model="voucherUrl"
+                        type="url"
+                        @keydown.enter="resolveVoucher"
+                        placeholder="Dán link Shopee (shopee.vn hoặc s.shopee.vn)..."
+                        class="w-full px-4 py-4 border border-[var(--color-line)] rounded-2xl text-sm bg-[var(--color-surface)] focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-peach)] transition shadow-sm"
+                    />
+                    <button
+                        @click="resolveVoucher"
+                        :disabled="resolving || !voucherUrl.trim()"
+                        class="w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-deep)] text-white font-bold px-7 py-4 rounded-2xl transition shadow-md disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                        <svg v-if="resolving" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" stroke-dasharray="30 70" />
+                        </svg>
+                        {{ resolving ? 'Đang xử lý...' : 'Lấy link voucher' }}
+                    </button>
+                    <p v-if="voucherError" class="text-red-500 text-sm text-center">{{ voucherError }}</p>
+                </div>
+
+                <!-- Kết quả -->
+                <div v-if="voucherResult" class="mt-6 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-line)] p-5">
+                    <div v-if="voucherResult.product" class="flex gap-4 items-start mb-5">
+                        <div class="w-16 h-16 rounded-xl bg-[var(--color-peach-soft)] flex-none overflow-hidden">
+                            <img v-if="voucherResult.product.product_image" :src="voucherResult.product.product_image" :alt="voucherResult.product.product_name" class="w-full h-full object-cover" />
+                            <div v-else class="w-full h-full flex items-center justify-center text-2xl">🛍️</div>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-semibold text-[var(--color-ink)] text-sm line-clamp-2">{{ voucherResult.product.product_name || 'Sản phẩm' }}</p>
+                            <p class="font-bold text-[var(--color-accent)] mt-1">{{ vnd(voucherResult.product.discounted_price) }}</p>
+                        </div>
+                    </div>
+                    <p v-else class="text-sm text-[var(--color-muted)] mb-5">Không lấy được thông tin sản phẩm, nhưng bạn vẫn có thể dùng link voucher bên dưới.</p>
+
+                    <div v-if="voucherResult.voucher_labels?.length" class="flex flex-wrap gap-2 mb-4">
+                        <span
+                            v-for="(label, i) in voucherResult.voucher_labels"
+                            :key="i"
+                            class="text-xs font-semibold px-3 py-1 rounded-full bg-[var(--color-green-soft)] text-[var(--color-ink)]"
+                        >
+                            {{ label }}
+                        </span>
+                    </div>
+
+                    <div v-if="voucherLinkEntries.length" class="flex flex-col gap-2 mb-4">
+                        <button
+                            v-for="entry in voucherLinkEntries"
+                            :key="entry.key"
+                            @click="openVoucherLink(entry)"
+                            :disabled="shorteningKey === entry.key"
+                            class="w-full bg-[var(--color-peach-soft)] hover:bg-[var(--color-peach)] text-[var(--color-ink)] font-semibold px-5 py-3 rounded-xl transition text-sm flex items-center justify-between disabled:opacity-60"
+                        >
+                            {{ shorteningKey === entry.key ? 'Đang chuyển hướng...' : `Mua ngay — ${entry.label}` }}
+                            <span class="text-[var(--color-accent)]">→</span>
+                        </button>
+                    </div>
+                    <p v-else class="text-sm text-[var(--color-muted)] mb-4">Không tìm thấy link voucher cho sản phẩm này.</p>
+
+                    <p class="text-xs text-[var(--color-muted)] mb-4">Nếu 1 mã báo hết lượt, thử mã khác bên trên — salesoc.vn không báo trước mã nào còn hạn.</p>
+
+                    <Disclaimer />
+                </div>
+
+                <!-- Lịch sử link (lưu trên trình duyệt) -->
+                <div v-if="history.length" class="mt-8">
+                    <h3 class="text-sm font-bold text-[var(--color-ink)] mb-3">Link gần đây</h3>
+                    <div class="flex flex-col gap-2">
+                        <a
+                            v-for="(h, i) in history"
+                            :key="i"
+                            :href="h.url"
+                            target="_blank"
+                            rel="noopener"
+                            class="flex items-center gap-3 bg-[var(--color-surface)] border border-[var(--color-line)] rounded-xl px-4 py-3 text-sm text-[var(--color-ink)] hover:border-[var(--color-accent)] transition"
+                        >
+                            <span class="truncate flex-1">{{ h.product_name || h.url }}</span>
+                            <span class="text-[var(--color-muted)] text-xs whitespace-nowrap">{{ new Date(h.created_at).toLocaleDateString('vi-VN') }}</span>
+                        </a>
+                    </div>
                 </div>
             </div>
         </section>
